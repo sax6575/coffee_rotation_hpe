@@ -1,0 +1,61 @@
+plugins {
+    id 'groovy'
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.codehaus.groovy:groovy-all:3.0.9'
+    implementation 'org.codehaus.groovy:groovy-json:3.0.9'
+
+    testImplementation 'org.spockframework:spock-core:2.0-groovy-3.0'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+application {
+    mainClass = 'coffeerotation.Main'
+}
+
+// Configure the run task to handle interactive console input
+run {
+    standardInput = System.in
+}
+
+// Create a fat JAR with all dependencies included
+jar {
+    manifest {
+        attributes(
+                'Main-Class': 'coffeerotation.Main'
+        )
+    }
+
+    // Include all dependencies in the JAR
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+
+    // Avoid duplicate files during JAR creation
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// Create a distribution ZIP with scripts to run the application
+task createDistribution(type: Zip) {
+    from jar.outputs.files
+    from 'src/main/resources'
+    from('.') {
+        include 'README.md'
+    }
+
+    // Create platform-specific scripts
+    from('scripts') {
+        include '*.sh', '*.bat'
+    }
+}
