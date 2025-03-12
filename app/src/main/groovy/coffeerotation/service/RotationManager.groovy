@@ -2,6 +2,7 @@ package coffeerotation.service
 
 import coffeerotation.model.Coworker
 import coffeerotation.model.CoffeeOrder
+import coffeerotation.service.PaymentCalculator
 
 import groovy.json.JsonBuilder
 import groovy.json.JsonSlurper
@@ -28,6 +29,7 @@ class RotationManager {
         calculator = new PaymentCalculator([]) // Initialize with empty list first
         loadData() // This will populate coworkers and then load orders into calculator
         calculator = new PaymentCalculator(coworkers) // Update with loaded coworkers
+        calculator = new PaymentCalculator(coworkers) // Update with loaded coworkers
     }
 
     /**
@@ -50,12 +52,48 @@ class RotationManager {
      * @return true if removed successfully, false otherwise
      */
     boolean removeCoworker(String coworkerId) {
-        def removed = coworkers.removeAll { it.id == coworkerId }
-        if (removed) {
-            saveData()
-            return true
+        def coworkerToRemove = coworkers.find { it.id == coworkerId }
+        if (!coworkerToRemove) {
+            return false
         }
-        return false
+
+        // Check if this coworker paid for any orders
+        boolean paidForOrders = calculator.getOrderHistory().any { it.paidBy.id == coworkerId }
+        if (paidForOrders) {
+            // Disallow removal if they paid for orders (would break the payment history)
+            return false
+        }
+
+        // Remove the coworker
+        coworkers.removeAll { it.id == coworkerId }
+        saveData()
+
+        // Refresh the calculator with updated coworker list
+        calculator = new PaymentCalculator(coworkers)
+
+        return true
+    }
+
+    /**
+     * Get a specific coworker by ID
+     * @param coworkerId The ID of the coworker to find
+     * @return The coworker or null if not found
+     */
+    Coworker getCoworkerById(String coworkerId) {
+        return coworkers.find { it.id == coworkerId }
+    }
+
+    /**
+     * Get a specific coworker by index (1-based for user-friendliness)
+     * @param index The 1-based index of the coworker
+     * @return The coworker or null if index is invalid
+     */
+    Coworker getCoworkerByIndex(int index) {
+        int arrayIndex = index - 1
+        if (arrayIndex < 0 || arrayIndex >= coworkers.size()) {
+            return null
+        }
+        return coworkers[arrayIndex]
     }
 
     /**
@@ -81,6 +119,48 @@ class RotationManager {
         }
 
         def order = new CoffeeOrder(new Date(), participants, payer)
+        calculator.recordOrder(order)
+        saveData()
+        return order
+    }
+
+    /**
+     * Create a new custom coffee order for today where coworkers might order different drinks
+     * @param participants List of coworkers who participated
+     * @param payer The coworker who paid
+     * @param customBeverages Map of coworker ID to custom beverage name (optional)
+     * @param customPrices Map of coworker ID to custom price (optional)
+     * @return The newly created order
+     */
+    CoffeeOrder createCustomOrder(
+            List<Coworker> participants,
+            Coworker payer,
+            Map<String, String> customBeverages = [:],
+            Map<String, BigDecimal> customPrices = [:]
+    ) {
+        if (participants.isEmpty() || !payer) {
+            return null
+        }
+
+        // Create temporary coworkers with custom beverages and prices for this order
+        def orderParticipants = participants.collect { coworker ->
+            if (customBeverages.containsKey(coworker.id) || customPrices.containsKey(coworker.id)) {
+                // Create a temporary coworker with custom properties just for this order
+                def beverage = customBeverages.containsKey(coworker.id) ?
+                        customBeverages[coworker.id] : coworker.preferredBeverage
+
+                def price = customPrices.containsKey(coworker.id) ?
+                        customPrices[coworker.id] : coworker.beveragePrice
+
+                def tempCoworker = new Coworker(coworker.name, beverage, price)
+                tempCoworker.id = coworker.id
+                return tempCoworker
+            } else {
+                return coworker
+            }
+        }
+
+        def order = new CoffeeOrder(new Date(), orderParticipants, payer)
         calculator.recordOrder(order)
         saveData()
         return order
@@ -115,8 +195,8 @@ class RotationManager {
         def coworkersFile = new File(COWORKERS_FILE)
         if (coworkersFile.exists()) {
             try {
-                def slurp = new JsonSlurper()
-                def coworkersData = slurp.parse(coworkersFile)
+                def slurper = new JsonSlurper()
+                def coworkersData = slurper.parse(coworkersFile)
 
                 coworkers = coworkersData.collect { data ->
                     def coworker = new Coworker(
@@ -142,8 +222,8 @@ class RotationManager {
 
         if (ordersFile.exists()) {
             try {
-                def slurp = new JsonSlurper()
-                def ordersData = slurp.parse(ordersFile)
+                def slurper = new JsonSlurper()
+                def ordersData = slurper.parse(ordersFile)
 
                 orders = ordersData.collect { data ->
                     // Find the payer and participants by their IDs
