@@ -30,7 +30,7 @@ java -jar app/build/libs/app.jar
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/coffee-rotation-hpe.git
+   git clone https://github.com/sax6575/coffee_rotation_hpe.git
    cd coffee-rotation-hpe
    ```
 
