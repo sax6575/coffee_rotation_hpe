@@ -52,11 +52,6 @@ You can also run the application directly with Gradle, but this will show progre
 ./gradlew run
 ```
 
-For a cleaner output, use the quiet flag:
-```bash
-./gradlew run -q
-```
-
 ### Using the Application
 
 Once running, the application presents a menu-driven interface:
